@@ -1,0 +1,316 @@
+# ---------------------------------------------------------------------------
+# Check registry. This is the standard BOTH pa-model-design (self-check) and
+# pa-model-review (verification) apply, so the two cannot drift apart.
+#
+# Add a check = add an entry. No skill prose changes.
+#
+# severity : critical | warning | info   (blocking behaviour from config.review)
+# phase    : design (spec only) | build (server only) | both
+# applies_to: dimension | cube | rule | feeder | process | security | naming
+# config_ref: the conventions key that switches or parameterises this check
+# ---------------------------------------------------------------------------
+schema_version: 1
+
+checks:
+
+  # ---- Dimensions ----
+  - id: DIM-001
+    severity: critical
+    phase: both
+    applies_to: dimension
+    title: Leaf grain is stated and consistent
+    detect: A dimension has no declared leaf_grain, or cubes disagree about what one leaf represents.
+    fix: State the leaf grain in the spec. If two cubes need different grains, they need different dimensions.
+
+  - id: DIM-002
+    severity: warning
+    phase: both
+    applies_to: dimension
+    title: Single top-level consolidation exists
+    detect: A dimension has no single "All" member covering every leaf.
+    fix: Add a top consolidation so views and rules have a total to reference.
+
+  - id: DIM-003
+    severity: critical
+    phase: both
+    applies_to: dimension
+    title: No member is both input and consolidation
+    detect: A member has children and also receives loaded or entered values.
+    fix: Split into a leaf sibling plus the consolidation. Otherwise the value double-counts.
+
+  - id: DIM-004
+    severity: warning
+    phase: design
+    applies_to: dimension
+    title: Time carries a quarter rollup
+    detect: Monthly time dimension with no quarter level.
+    fix: Add the quarter rollup now. Retrofitting means rebuilding the dimension.
+    config_ref: modelling.time.include_quarter_rollup
+
+  - id: DIM-005
+    severity: critical
+    phase: both
+    applies_to: dimension
+    title: Fiscal year start is explicit
+    detect: Time hierarchy assumes a January start without confirmation.
+    fix: Set the start from config and reflect it in quarter grouping.
+    config_ref: modelling.time.fiscal_year_start_month
+
+  - id: DIM-006
+    severity: info
+    phase: design
+    applies_to: dimension
+    title: Member-varying logic uses attributes
+    detect: A rule or process branches on literal element names.
+    fix: Move the variation to an attribute and write one generic rule.
+
+  # ---- Cubes ----
+  - id: CUB-001
+    severity: warning
+    phase: both
+    applies_to: cube
+    title: Dimension count within limit
+    detect: Cube dimension count exceeds the configured maximum.
+    fix: Usually two grains fused. Look for a dimension meaningful to only some measures.
+    config_ref: review.thresholds.max_cube_dimensions
+
+  - id: CUB-002
+    severity: warning
+    phase: both
+    applies_to: cube
+    title: Dimension order follows policy
+    detect: Order does not match the configured policy, or no rationale is recorded.
+    fix: Apply the policy and record which goal the order optimises. Skip when policy is `manual`.
+    config_ref: modelling.dimension_order_policy
+
+  - id: CUB-003
+    severity: warning
+    phase: both
+    applies_to: cube
+    title: Measure dimension present
+    detect: Cube has no measure dimension while config requires one.
+    fix: Add one rather than modelling metrics as separate cubes.
+    config_ref: modelling.measure_dimension
+
+  - id: CUB-004
+    severity: critical
+    phase: both
+    applies_to: cube
+    title: Calculated measures are protected
+    detect: A rule_derived measure is writable by users.
+    fix: Apply cell security or input-view design. A typed-over calculated cell disagrees with its own formula.
+    config_ref: rules.protect_calculated_measures
+
+  - id: CUB-005
+    severity: info
+    phase: design
+    applies_to: cube
+    title: Member counts and density recorded
+    detect: estimated_members or density missing from a dimension entry.
+    fix: Record both. Dimension order cannot be checked without them.
+
+  # ---- Rules ----
+  - id: RUL-001
+    severity: critical
+    phase: both
+    applies_to: rule
+    title: SKIPCHECK present with FEEDERS
+    detect: Cube has rules and SKIPCHECK but no FEEDERS section, or FEEDERS precedes the rules.
+    fix: Order is FEEDSTRINGS, SKIPCHECK, rules, FEEDERS.
+    config_ref: rules.require_skipcheck
+
+  - id: RUL-002
+    severity: critical
+    phase: both
+    applies_to: rule
+    title: FEEDSTRINGS present when string rules exist
+    detect: A rule returns a string and FEEDSTRINGS is absent or not the first line.
+    fix: Make FEEDSTRINGS the literal first line of the rules file.
+    config_ref: rules.feedstrings_when_string_rules
+
+  - id: RUL-003
+    severity: critical
+    phase: both
+    applies_to: rule
+    title: Consolidated scope is justified
+    detect: "A rule scoped C: or unqualified has no recorded justification."
+    fix: "Default to N:. Use C: only where the total genuinely is not the sum of its children, and say why."
+
+  - id: RUL-004
+    severity: warning
+    phase: both
+    applies_to: rule
+    title: Precedence ordered specific before general
+    detect: A broader rule area precedes a narrower one targeting the same cells.
+    fix: Reorder. The first match wins and the narrower rule is silently dead.
+
+  - id: RUL-005
+    severity: warning
+    phase: both
+    applies_to: rule
+    title: Safe divide used
+    detect: A rule divides with / where the denominator can legitimately be zero.
+    fix: Use \ so an empty denominator yields zero instead of a rules error.
+
+  - id: RUL-006
+    severity: info
+    phase: design
+    applies_to: rule
+    title: Rule is the right tool
+    detect: Rule computes a value that never changes between data loads.
+    fix: Consider a TI process. Rules evaluate on every read, forever.
+
+  # ---- Feeders ----
+  - id: FED-001
+    severity: critical
+    phase: both
+    applies_to: feeder
+    title: Every leaf rule has a feeder
+    detect: "An N: rule has neither a feeder nor a recorded feeder_none_reason."
+    fix: Add the feeder. Unfed rule cells read zero in consolidations under SKIPCHECK.
+    config_ref: rules.require_feeder_for_every_leaf_rule
+
+  - id: FED-002
+    severity: critical
+    phase: both
+    applies_to: feeder
+    title: Cross-cube feeders exist in the source cube
+    detect: A rule uses DB() to read another cube with no corresponding feeder in that source cube.
+    fix: Add the feeder to the source cube. Most commonly missed, because rule and feeder live in different files.
+
+  - id: FED-003
+    severity: warning
+    phase: both
+    applies_to: feeder
+    title: Feeder source is the sparsest operand
+    detect: Feeder sources the densely populated operand of a multiplication.
+    fix: Feed from the operand most often empty. This is the main lever on model memory.
+
+  - id: FED-004
+    severity: warning
+    phase: both
+    applies_to: feeder
+    title: Feeder fan-out within threshold
+    detect: Estimated or measured fan-out exceeds the configured maximum without justification.
+    fix: Narrow with a conditional feeder mirroring the rule's own condition.
+    config_ref: review.thresholds.max_feeder_fanout
+
+  - id: FED-005
+    severity: warning
+    phase: both
+    applies_to: feeder
+    title: Feeder source is leaf level
+    detect: Feeder sources a consolidated cell.
+    fix: Feed from leaf level.
+
+  - id: FED-006
+    severity: warning
+    phase: both
+    applies_to: feeder
+    title: Feeder target fully qualified
+    detect: A feeder target leaves a dimension unqualified, feeding it entirely.
+    fix: Qualify every dimension on the target side.
+
+  # ---- Processes ----
+  - id: TI-001
+    severity: critical
+    phase: both
+    applies_to: process
+    title: Tab separation respected
+    detect: Cell writes in Metadata, or dimension updates in Data.
+    fix: Dimension maintenance in Metadata, cell writes in Data.
+    config_ref: ti.tab_policy
+
+  - id: TI-002
+    severity: critical
+    phase: both
+    applies_to: process
+    title: No hard-coded object names
+    detect: A literal server, database, cube, or file path appears in process code.
+    fix: Resolve from parameters or a control cube so the process promotes across environments unedited.
+    config_ref: ti.forbid_hardcoded_object_names
+
+  - id: TI-003
+    severity: warning
+    phase: both
+    applies_to: process
+    title: Parameters validated in Prolog
+    detect: Process uses a parameter without checking it before writing anything.
+    fix: Validate and reject in Prolog, before partial writes occur.
+    config_ref: ti.require_parameters
+
+  - id: TI-004
+    severity: warning
+    phase: both
+    applies_to: process
+    title: Temporary views and subsets are per-run
+    detect: Process uses a pre-existing named view or subset, or fails to destroy what it created.
+    fix: Create uniquely named temporaries in Prolog, destroy in Epilog. Shared objects corrupt concurrent runs.
+
+  - id: TI-005
+    severity: warning
+    phase: both
+    applies_to: process
+    title: Process is idempotent
+    detect: Re-running changes the result, usually accumulation or no scoped clear.
+    fix: Clear the target scope through a Prolog-built view; prefer CellPutN over CellIncrementN.
+
+  - id: TI-006
+    severity: warning
+    phase: both
+    applies_to: process
+    title: Outcome counts reported
+    detect: Process logs nothing about rows read, written, rejected.
+    fix: Log counts in Epilog. A process writing nothing must not look like success.
+    config_ref: ti.require_error_handling
+
+  - id: TI-007
+    severity: info
+    phase: both
+    applies_to: process
+    title: No Boolean variable type assumed
+    detect: Code or spec treats a variable as Boolean.
+    fix: TI has Numeric and String only. Use numeric 0/1.
+
+  - id: TI-008
+    severity: warning
+    phase: design
+    applies_to: process
+    title: One job per process
+    detect: A single process loads, transforms, and clears.
+    fix: "Split and orchestrate with a chore, so a partial failure can be re-run. Exception: atomic object creation."
+
+  # ---- Security and naming ----
+  - id: SEC-001
+    severity: critical
+    phase: both
+    applies_to: security
+    title: No credentials in artefacts
+    detect: A key, token, password, tenant id, region, or host appears in any spec, config, or process.
+    fix: Remove it. Connections come from the MCP session or environment variables.
+
+  - id: SEC-002
+    severity: warning
+    phase: both
+    applies_to: security
+    title: Write access is deliberate
+    detect: A role has write access to a cube with no recorded reason, or to a prod environment marked read-only.
+    fix: Restate intended access per role and cube.
+
+  - id: NAM-001
+    severity: warning
+    phase: both
+    applies_to: naming
+    title: Names follow configured templates
+    detect: An object name does not match its naming template.
+    fix: Rename. Renaming after rules and processes reference the object is materially harder.
+    config_ref: naming
+
+  - id: NAM-002
+    severity: critical
+    phase: both
+    applies_to: naming
+    title: Control object prefix not used
+    detect: A designed or built object uses the reserved control prefix.
+    fix: Rename. Those names belong to TM1.
+    config_ref: naming.reserved_prefixes.control
