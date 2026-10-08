@@ -150,7 +150,7 @@ checks:
     applies_to: rule
     title: Safe divide used
     detect: A rule divides with / where the denominator can legitimately be zero.
-    fix: Use \ so an empty denominator yields zero instead of a rules error.
+    fix: Use \ so an empty denominator yields zero instead of an undefined (N/A) value.
 
   - id: RUL-006
     severity: info

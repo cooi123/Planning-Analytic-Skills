@@ -62,20 +62,28 @@ Validate every parameter in Prolog and exit before touching anything:
 
 ```
 IF( pCube @= '' );
-  ItemReject( 'pCube is required' );
+  LogOutput( 'ERROR', 'pCube is required' );
+  ProcessError;
 ENDIF;
 IF( CubeExists( pCube ) = 0 );
-  ItemReject( 'Cube not found: ' | pCube );
+  LogOutput( 'ERROR', 'Cube not found: ' | pCube );
+  ProcessError;
 ENDIF;
 ```
+
+`ItemReject` belongs in Metadata and Data, where there is a source record to
+reject. Prolog runs before any record is read, so stop the run there instead.
+`ProcessError` ends it with an error status that chores and calling processes
+can see.
 
 ## 5. Error handling
 
 Required when `{{config.ti.require_error_handling}}` is true.
 
 - Validate inputs in Prolog and reject early, before partial writes occur.
-- `ItemReject` skips the record, `ProcessQuit` stops the run. Choose between them.
-  A bad record and a bad configuration deserve different outcomes.
+- `ItemReject` skips one record. `ProcessError` stops the run with an error
+  status, and `ProcessQuit` stops it quietly. A bad record and a bad
+  configuration deserve different outcomes.
 - Log to a known location in Epilog: rows read, rows written, rows rejected.
 - A process that writes nothing and reports success is indistinguishable from one that
   worked. Always report counts.
