@@ -102,15 +102,23 @@ def _is_separator_row(cells: List[str]) -> bool:
 
 
 _MAGNITUDE_SUFFIXES = {"K": 1_000, "M": 1_000_000, "B": 1_000_000_000}
+_CURRENCY_SYMBOLS = "$€£¥₹"
 
 
 def _clean_number(raw: str) -> Optional[float]:
     """Parses either a raw TM1-style number ('79,382,396.00') or a PAW-style
-    abbreviated display value ('79.4M', '17.8%') into a comparable float."""
-    raw = raw.strip()
+    display value ('79.4M', '17.8%', '$31,709,088', '(19,910,700)') into a
+    comparable float. Accounting parentheses and a unicode minus are negative."""
+    raw = str(raw).strip()
     if not raw or raw.upper() in {"N/A", "NA"}:
         return None
-    cleaned = raw.replace(",", "").replace("%", "").replace("pp", "").strip()
+    cleaned = raw.replace(",", "").replace("%", "").replace("pp", "").replace("−", "-")
+    cleaned = "".join(ch for ch in cleaned if ch not in _CURRENCY_SYMBOLS and not ch.isspace())
+    negative = False
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        negative, cleaned = True, cleaned[1:-1]
+    if cleaned.startswith("-") and not cleaned.startswith("--"):
+        negative, cleaned = not negative, cleaned[1:]
     if cleaned.startswith("+"):
         cleaned = cleaned[1:]
     multiplier = 1.0
@@ -118,9 +126,26 @@ def _clean_number(raw: str) -> Optional[float]:
         multiplier = _MAGNITUDE_SUFFIXES[cleaned[-1].upper()]
         cleaned = cleaned[:-1].strip()
     try:
-        return float(cleaned) * multiplier
+        value = float(cleaned) * multiplier
     except ValueError:
         return None
+    return -value if negative else value
+
+
+def _values_match(expected_raw: str, expected: float, found_raw: str, found: float) -> bool:
+    """Equal within display rounding (2%, at least 0.05). When exactly one side
+    is a percentage, PAW's '17.8%' and TM1's raw 0.178 are the same value."""
+    def close(a: float, b: float) -> bool:
+        return abs(a - b) <= max(0.05, abs(a) * 0.02)
+
+    if close(expected, found):
+        return True
+    expected_pct, found_pct = "%" in expected_raw, "%" in found_raw
+    if expected_pct and not found_pct:
+        return close(expected, found * 100)
+    if found_pct and not expected_pct:
+        return close(expected * 100, found)
+    return False
 
 
 def _parse_table(text: str) -> "tuple[Optional[List[str]], Optional[List[List[str]]], Optional[str]]":
@@ -213,8 +238,7 @@ def _resolve_one(
                 "treat as UNVERIFIED, do not name a route/measure from this cell."
             )
             return {"status": "unverified", "report": "\n".join(lines_out), **base}
-        tolerance = max(0.05, abs(expected_num) * 0.02)
-        if abs(expected_num - found_value_num) <= tolerance:
+        if _values_match(expected_value, expected_num, found_value_raw, found_value_num):
             lines_out.append(f"MATCH CHECK: MATCH — expected '{expected_value}' matches the value found here.")
             return {"status": "resolved", "report": "\n".join(lines_out), **base}
         lines_out.insert(0, "MISMATCH — DO NOT TRUST THIS RESOLUTION")

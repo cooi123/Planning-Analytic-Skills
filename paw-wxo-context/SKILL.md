@@ -43,20 +43,51 @@ fields and the shape variations a parser must handle.
    instance:
    ```json
    {
-     "purchaseID": "<purchase_id>",
-     "wxo_agent": {
-       "orchestrationID": "<id>",
-       "hostURL": "https://<region>.watson-orchestrate.cloud.ibm.com",
-       "agentId": "<agent_id>",
-       "agentEnvironmentId": "<live_env_id>",
-       "perspectives": ["dashboard"],
-       "authKey": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-     }
+     "orchestrationID": "<id>",
+     "hostURL": "https://<region>.watson-orchestrate.cloud.ibm.com",
+     "agentId": "<agent_id>",
+     "agentEnvironmentId": "<live_env_id>",
+     "perspectives": ["dashboard"],
+     "purchaseID": "123",
+     "authKey": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
    }
    ```
+   Keep every field at the **top level**, not nested under a `"wxo_agent"`
+   object; the flat shape is what a working PAoC 2.1.23 instance accepts.
+   `purchaseID` must be present, but any placeholder is accepted for a custom
+   instance. Omit `authKey` only if embedded-chat security is disabled on the wxO
+   instance. Don't keep the private key inside the workspace or repo, and don't
+   open it in an editor that shares selections with an assistant. Security is set once per
+   wxO instance, not per agent, so check whether a client public key is already
+   configured before replacing it: other embedded chats may depend on it.
+
+   Take `agentEnvironmentId` from the **live** environment. The CLI can't print the
+   embed snippet when your API key can't read the IBM Cloud resource controller
+   (CRN lookup `403`), so copy the values from Channels → Embedded agent in the UI.
+
+4. **PAoC 2.1.23 also asks for an IBM watsonx.ai configuration**, rejecting the
+   setup with `Invalid WatsonX.AI config, <key> is required` until it has one.
+   It names one missing key at a time:
+   ```json
+   {
+     "watsonx_api_url": "https://<region>.ml.cloud.ibm.com",
+     "watsonx_api_key": "<IBM Cloud IAM API key>",
+     "watsonx_api_project_id": "<watsonx.ai project ID>"
+   }
+   ```
+   `watsonx_api_url` and `watsonx_api_project_id` were named by PAW's own
+   validation. `watsonx_api_key` was accepted without complaint. The URL is the
+   watsonx.ai runtime endpoint for the region the project lives in. The project ID
+   is under watsonx.ai → Projects → your project → Manage → General, and the
+   project needs a watsonx.ai Runtime service associated. This is a real
+   dependency: placeholders won't pass Test connection. Your wxO agent still runs
+   on its own LLM; this configuration is for PAW's side of the integration.
+
    Test connection, then Apply. Start with `dashboard` only, because it carries the
-   richest context. Add `pa-home`, `modeling`, `modeling-home`, `pa-administration`,
-   `pa-report` or `pa-plan-contribute` later.
+   richest context, and because every listed perspective loses the default PA
+   agent's built-in actions until you add the matching command guidelines (see
+   `paw-wxo-actions`). Add `pa-home`, `modeling`, `modeling-home`,
+   `pa-administration`, `pa-report` or `pa-plan-contribute` later.
 
 ## Step 1. Let the agent read the variable
 
@@ -169,9 +200,17 @@ production**, even with explicit instructions to be careful. The fix that held u
    Reusing a cell resolved in an earlier turn went unchecked.
 4. Only after resolution, pass the real member names to your business tools.
 
-Import with `orchestrate tools import -k python -f .../resolve_selected_cell.py -r
-.../requirements.txt`, and add `resolve_selected_cell` and `resolve_selected_cells`
-to the agent's `tools:`. The docstrings mention routes from the original airline
+Run `python -m unittest test_resolve_selected_cell.py` first (needs the ADK
+installed), then import with `orchestrate tools import -k python -f
+.../resolve_selected_cell.py -r .../requirements.txt`, and add
+`resolve_selected_cell` and `resolve_selected_cells` to the agent's `tools:`.
+The value check accepts PAW display formats such as `$31,709,088`,
+`(19,910,700)`, `79.4M` and `17.8%` against the raw table value.
+
+Instructions alone don't stop the model from answering a repeat question from
+an earlier turn's table without calling any tool. In a live test it named the
+right member, but unverified. Pair the instructions with the Step 2 plugin, and
+check the reasoning trace, not just the answer. The docstrings mention routes from the original airline
 model. The code is generic and parses any markdown table.
 
 **Find the selection by its cells, not its flags.** In live captures,

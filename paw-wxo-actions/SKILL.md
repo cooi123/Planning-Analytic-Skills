@@ -48,8 +48,10 @@ MCP toolkit. Commands only change what the user sees.
 
 1. PAW is connected to the custom agent: Administration → Integrations → IBM
    watsonx Orchestrate → Custom instance, with `orchestrationID`, `hostURL`,
-   `agentId`, `agentEnvironmentId`, `perspectives` and `authKey`. If chat doesn't
-   load in PAW at all, fix this first. Actions can't be tested without it.
+   `agentId`, `agentEnvironmentId`, `perspectives`, `purchaseID` and `authKey`,
+   all at the top level, plus the watsonx.ai configuration on PAoC. The
+   `paw-wxo-context` skill, Step 0, has the exact JSON. If chat doesn't load in
+   PAW at all, fix this first. Actions can't be tested without it.
 2. The perspectives where you want actions are listed in `perspectives`. Any
    perspective you leave out keeps the default PA agent. Plans and Apps can't be
    switched yet.
@@ -96,9 +98,26 @@ Allowed values that come up most:
 Commands with no parameters (`chart_insights`, `impact_analysis`, `swap`, `copy`
 and so on) act on whatever is selected in PAW at that moment.
 
+Preconditions PAW enforces itself (verified on PAoC 2.1.23):
+
+- **A selected database.** `open_tm1_artifact` fails with "you have not
+  specified a search context" until `select_database` has run ("Work with
+  database X"). Always ship `select_database` alongside the TM1 commands.
+- **Edit mode for anything that adds a widget.** Opening a cube in a book makes
+  PAW ask "switch to edit mode and continue?" The change stays in the session
+  until someone saves the book.
+- **The perspective.** PAW refuses a dashboard command sent from another
+  perspective ("You cannot run the command on this perspective"), even when the
+  model ignores the guideline's own perspective check. The guideline check only
+  produces a friendlier message.
+
 **Provenance.** IBM documents only `open_tm1_artifact`. The rest come from a working
 reference agent (WxO-portable-template) whose templates mirror the default PA
-agent. Live-tested there: `chart_insights`, `impact_analysis`, `outlier_analysis`,
+agent. Live-tested on PAoC 2.1.23 with a custom agent: `open_paw_artifact`,
+`open_tm1_artifact`, `switch_to_perspective` and `select_database` (its
+`"type"` key works). wxO's import flags `open_paw_artifact` and
+`open_tm1_artifact` as conflicting, because both list a bare "Open" phrase.
+Live-tested in the reference agent: `chart_insights`, `impact_analysis`, `outlier_analysis`,
 `create_sandbox`, plus navigation and view changes. The admin commands, plan
 workflow, `member_calculation`, `summarize` and `annotation_summary` have no recorded
 test. Verify any of these in your PAW before relying on it (Step 4).
@@ -177,6 +196,8 @@ prose, are untested.
 1. Open PAW in the perspective the command is gated on, with chat on the custom
    agent.
 2. Send the trigger phrase. Expect PAW to act, with no visible JSON in the chat.
+   `references/paw-responses.md` lists the confirmations and refusals PAW
+   returns, and how to tell PAW's messages from the agent's.
 3. If the raw JSON shows up in chat, PAW didn't recognise it: compare against the
    template field by field, including `type` vs `response_type` and array vs
    string.
