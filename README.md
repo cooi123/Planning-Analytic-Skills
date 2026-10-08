@@ -170,7 +170,8 @@ It ships with four references:
 - `references/rules-functions.md`: every function category in PAW's Function
   list, and when to use the hierarchy-aware `Element…` functions over the legacy
   ones.
-- `references/rule-examples.md`: eight worked rule and feeder pairs.
+- `references/rule-examples.md`: eleven worked rule and feeder pairs, several
+  adapted from IBM's TM1 Rules guide (time series, allocation, stocks and flows).
 - `references/writing-and-deploying-guide.md`: a step-by-step human guide,
   including loading rules through the PAW Modeling workbench,
   `RuleLoadFromFile` and the TM1 REST API. The PA MCP endpoint has no rules

@@ -106,7 +106,10 @@ FEEDERS;
        !Version, !Period, !Product, !Region, 'Commission');
 ```
 
-The feeder mirrors the rule's condition, so inactive products aren't fed. A
+The feeder mirrors the rule's condition, so inactive products aren't fed.
+Conditional feeders aren't supported with multi-threaded feeders (`MTFeeders`). On
+such servers, disable multi-threaded loading for this cube, or feed
+unconditionally. A
 feeder's condition is evaluated when the feeder fires. If the attribute changes
 later, reprocess feeders (the **Process feeders** button in the rules editor, or
 `CubeProcessFeeders` in TI).
@@ -119,14 +122,20 @@ dimension.
 ```
 FEEDSTRINGS;
 SKIPCHECK;
-['Sales Measure':'Status'] = N: IF(['Units'] > 0, 'Selling', 'No sales');
+['Sales Measure':'Status'] = S: IF(['Units'] > 0, 'Selling', 'No sales');
 
 FEEDERS;
 ['Sales Measure':'Units'] => ['Sales Measure':'Status'];
 ```
 
-Without `FEEDSTRINGS` and the feeder, `Status` disappears from zero-suppressed
-views.
+- `S:` because a cell whose last coordinate is a string element is a string cell.
+  `N:` covers leaf **numeric** cells only, so an `N:` statement would never fire
+  here.
+- Both `IF` branches are strings. Mixing a string and a number is an error.
+- Reading `Units` with `['Units']` is fine because it's numeric. To read another
+  string cell, use `DB()`, even in the same cube.
+- Without `FEEDSTRINGS` and the feeder, `Status` disappears from zero-suppressed
+  views.
 
 ## 8. Opening balance from the prior period
 
@@ -140,14 +149,89 @@ last periods hold an empty value.
 
 FEEDERS;
 ['Balance Measure':'Closing'] =>
-    DB('Balance', !Version, ATTRS('Period', !Period, 'Next'), !Account, 'Opening');
+    DB(IF(ATTRS('Period', !Period, 'Next') @= '', '', 'Balance'),
+       !Version, ATTRS('Period', !Period, 'Next'), !Account, 'Opening');
 ```
 
 - The feeder looks **forward** (Closing feeds the next period's Opening), while
   the rule looks back.
-- The rule's `IF` handles the first period explicitly, using `@=` because it's a
-  string comparison. Don't rely on a `DB()` with an empty element name to return 0.
-- For the last period, `Next` is empty, so the feeder target is invalid and nothing
-  is fed. That's the same mechanism as the conditional feeder.
+- Both ends are guarded explicitly. The rule returns 0 in the first period. In the
+  last period, the feeder's cube name becomes empty, which is the
+  conditional-feeder mechanism, so nothing is fed. IBM's guide also guards these
+  edges explicitly rather than referencing a non-existent element.
+- Attributes keep the logic independent of where consolidations sit in the
+  dimension. The `DIMIX`/`DNEXT` alternative is in example 9.
 - If Opening has no `C:` rule, a full-year total would sum twelve opening balances.
   Add a `C:` statement or exclude the measure from period consolidations.
+
+## 9. Actuals, then projection, from a user-set current month
+
+Adapted from IBM's Rules guide (time-based calculations). `Plan` has Product,
+Month and Plan Measure. `Control` is a two-dimensional string cube whose single
+cell holds the current month's name. Months 1–12 come first in the Month
+dimension, with quarters and the year after them.
+
+```
+['Plan Measure':'Units'] =
+    IF(DIMIX('Month', !Month) < DIMIX('Month', DB('Control', 'Value', 'Current Month')),
+       DB('Actuals', !Product, !Month, 'Units'),
+       DB('Plan', !Product, DIMNM('Month', DIMIX('Month', !Month) - 1), 'Units') * ['Growth %']);
+
+FEEDERS;
+['Plan Measure':'Units'] =>
+    DB('Plan', !Product,
+       IF(DIMIX('Month', !Month) < 12, DNEXT('Month', !Month), 'December'),
+       'Units');
+```
+
+- One statement covers every month, and nobody edits the rule month to month.
+  Users change the `Control` cell.
+- Prefer the control cube over `TIMVL(NOW, 'M')`: it lets the business hold a
+  month open until actuals are ready, and roll back to review an earlier
+  projection.
+- The feeder's `IF` stops `DNEXT` stepping from December into Q1, Q2 … Total Year.
+  Feeding those consolidations would feed the whole cube.
+- `DB('Control', …)` is how a rule reads a string cell.
+- The `Actuals` cube also needs a feeder into `Plan` for the months pulled from it.
+  It goes in the `Actuals` rule, because cross-cube feeders live in the source.
+
+## 10. Allocation across two cubes
+
+Adapted from IBM's Rules guide (fixed allocations). Fish required per cake is cake
+production times the recipe percentage:
+
+```
+# in FishRequired (CakeType, FishType, Date, Measure)
+['Qty Required - Kgs'] = N:
+    DB('Production', !CakeType, !Date, 'Quantity Produced - Kgs')
+  * DB('Ingredients', !CakeType, !FishType);
+```
+
+```
+# in Production (CakeType, Date, Measure)
+FEEDERS;
+['Quantity Produced - Kgs'] =>
+    DB('FishRequired', !CakeType, 'Total Fish Types', !Date, 'Qty Required - Kgs');
+```
+
+- The formula multiplies values from two cubes, so the feeder could live in either.
+  It goes in **Production**, the sparser one: not every cake is made every day,
+  while recipes are dense.
+- FishRequired has a FishType dimension that Production lacks, so the feeder
+  targets `Total Fish Types`, which feeds every fish type. This overfeeding is
+  unavoidable when the target cube has more dimensions than the source.
+
+## 11. A result that needs both operands
+
+From IBM's stocks-and-flows example:
+
+```
+['Used'] = N: IF(['Available'] >= ['Required'], ['Required'], ['Available']);
+
+FEEDERS;
+['Available'] => ['Used'];
+```
+
+`Used` can only be non-zero when **both** Available and Required are, so one
+feeder from either operand is enough. A second feeder would add nothing but cost.
+Pick the sparser operand.

@@ -102,7 +102,7 @@ Watch for:
 
 | Smell | Fix |
 |---|---|
-| Feeder source is a consolidated cell | Feed from leaf level |
+| Feeder source names a consolidation the rule doesn't read | Narrow it. Feeding starts from leaves, so a consolidation on the left fires for every leaf under it |
 | Feeder targets a whole dimension with no qualifier | Qualify the target |
 | Feeder ignores a condition the rule enforces | Make it a conditional feeder |
 | Cross-cube feeder with an unqualified target | Qualify every dimension on the target side |

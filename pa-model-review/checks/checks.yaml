@@ -199,9 +199,13 @@ checks:
     severity: warning
     phase: both
     applies_to: feeder
-    title: Feeder source is leaf level
-    detect: Feeder sources a consolidated cell.
-    fix: Feed from leaf level.
+    title: Feeder source matches what the rule reads
+    detect: >-
+      A feeder's left side names a consolidation the rule does not read, so every
+      leaf under it fires the feeder. Feeding always starts from leaf cells; a
+      consolidation on the left that mirrors a rule reading that consolidation
+      (IBM's documented cross-cube pattern) is not a finding.
+    fix: Narrow the source to the leaves, or to the consolidation the rule actually reads.
 
   - id: FED-006
     severity: warning

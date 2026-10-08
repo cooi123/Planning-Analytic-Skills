@@ -62,21 +62,32 @@ when a rule is the wrong tool rather than writing one anyway.
 
 ## Step 2. Write each statement
 
-`[area] = [N: | C:] formula;` Work through this checklist for every statement:
+`[area] = [N: | C: | S:] formula;` Work through this checklist for every statement:
 
 - **Area.** Make it as narrow as the logic needs. Qualify an element with its
   dimension (`['Measure':'Revenue']`) whenever the name could exist in another
   dimension.
 - **Scope.** Default to `N:`. Leave the scope off only when the consolidated value
   genuinely isn't the sum of its children: ratios, averages, rates, balances. Then
-  record why in a comment (`RUL-003`).
+  record why in a comment (`RUL-003`). Text results need `S:`, because `N:` never
+  reaches a string cell. Put the qualifier right before the formula, never at the
+  start of the statement.
+- **Precedence of operators.** `*` binds before `/`, so `a \ b * c` is
+  `a \ (b * c)`. Use parentheses whenever you mix them.
 - **Division.** Use `\` when the denominator can be zero. It returns 0, where `/`
   returns an undefined value (`RUL-005`).
-- **Strings.** Compare with `@=`, `@<>` and so on, not `=`.
+- **Strings.**
+  - Compare with `@=`, `@<>` and so on, not `=`.
+  - Read a string cell with `DB()`, even in the same cube.
+  - Both `IF` branches must be the same type.
 - **Logic.** `&` is AND, `%` is OR, `~` is NOT, and `|` joins strings. `|` is
   **not** OR.
 - **Cross-cube.** `DB('Cube', arg1, …)` takes one argument per dimension of the
-  target cube, in its order. Use `!Dim` to pass the current element through.
+  target cube, in its order. Use `!Dim` to pass the current element through. `!Dim`
+  must be a dimension of **this** cube.
+- **Time series.** Step periods with `DIMNM('Month', DIMIX('Month', !Month) - 1)`
+  and guard the first period. Hold "current month" in a control cube, not
+  `NOW`.
 - **Functions.**
   - If the dimension has alternate hierarchies, use the hierarchy-aware
     `Element…` functions. Otherwise match the family the file already uses.
@@ -93,14 +104,24 @@ With `SKIPCHECK` on, an unfed rule cell is treated as empty and vanishes from to
 and from zero-suppressed views. Never hand over a rule without its feeder, or a
 written reason it needs none. Apply `FED-001` to `FED-006`:
 
-- Feed from the **sparsest** operand: the one most often empty.
-- Feed from **leaf** cells, not consolidations.
-- Qualify the target fully. A feeder aimed at a consolidation feeds every leaf
-  under it.
+- Feed from the **sparsest** operand: the one most often empty. If the rule is
+  non-zero only when every operand is, one feeder from that operand is enough.
+- Feeding always starts from leaf cells. A consolidation on the left side is
+  shorthand for its leaves, which suits a feeder that mirrors a rule reading that
+  consolidation.
+- Qualify the target fully. A consolidation on the **right** side feeds every leaf
+  under it. Keep `DNEXT` or index steps off consolidations with a `DTYPE` or
+  `DIMIX` guard.
+- Feeders take no `N:`/`C:` qualifier. Where overfeeding is unavoidable (a target
+  cube with extra dimensions), say so.
+- Conditional feeders aren't supported with multi-threaded feeders
+  (`MTFeeders`). Ask whether the server uses them.
 - Mirror the rule's condition with a **conditional feeder** (see
   `rules-syntax.md`).
 - A rule that reads another cube with `DB()` needs its feeder written **in the
-  source cube's** rule file, pointing at the target cube.
+  source cube's** rule file, pointing at the target cube. When the formula
+  multiplies values from two cubes, put the feeder in the sparser one. Label
+  cross-cube feeders with a comment such as `# Feeders for the Inventory cube`.
 
 ## Step 4. Assemble into the full rule file
 
@@ -172,7 +193,11 @@ the symptom:
 | Total reads zero, leaves have values | Rule cells unfed (`FED-001`), or a cross-cube feeder is missing from the source cube (`FED-002`) |
 | `N/A` or blank where a number is expected | `/` dividing by zero, or a `DB()` pointing at a non-existent element |
 | Validation: `Syntax error on or before: … invalid string expression` | A `!Dim` names a dimension that isn't in this cube, or a `DB()` argument doesn't return an element name |
-| Rule seems to do nothing | A broader statement above it wins, or the area names an element that doesn't exist (typo, wrong dimension) |
+| Rule seems to do nothing | A broader statement above it wins, the area names an element that doesn't exist (typo, wrong dimension), or a text rule uses `N:` instead of `S:` |
+| `Error Evaluating Rule: Possible Circular Reference` | Two statements depend on each other, e.g. Sales from Price and Price from Sales |
+| Grand total differs between requests | A rule overrides a consolidation that is a component of another consolidation |
+| A `= 1` test on summed percentages sometimes fails | Floating point. Compare within a tolerance, or hold whole-number percentages |
+| A rule is slow | Turn on `RULE_STATS` in `}CubeProperties` and read `}StatsByRule` per line |
 | Total ≠ sum of children | The rule has no `N:` and overrides consolidation (`RUL-003`) |
 | String result vanishes | `FEEDSTRINGS` missing, or the string cell unfed (`RUL-002`) |
 | Can't type into a cell | A rule covers it. Narrow the area or add `STET` above |

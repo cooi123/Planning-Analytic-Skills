@@ -179,6 +179,9 @@ its output into the workbench.
 | Model slower, or memory up, after a change | Overfeeding: a feeder from a total, or to an unqualified target |
 | Save fails | Validation error. Read the message for the line, and check `;` and quotes first |
 | `invalid string expression` | A `!Dim` names a dimension that isn't in this cube, or a `DB()` argument isn't an element name |
+| Text rule shows nothing | It uses `N:`. String cells need `S:` (or no qualifier) |
+| `Possible Circular Reference` | Two statements depend on each other |
+| A rule is slow | Set `RULE_STATS` to YES for the cube in `}CubeProperties`, then read `}StatsByRule` (run count and time per line). Turn it off afterwards |
 
 ## 7. Keep it maintainable
 
