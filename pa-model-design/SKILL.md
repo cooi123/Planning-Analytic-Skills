@@ -50,6 +50,7 @@ missing and cannot be inferred from the request:
 | Versions / scenarios in scope | Usually a dimension, occasionally a cube split |
 | Expected member counts per dimension | Drives sparsity and dimension order |
 | Who may see and write what | Determines security and whether cell security is needed |
+| Whether an AI agent will query it | Decides where variance lives, and whether display names and loaded-scope subsets are required |
 
 Record any assumption you had to make. Assumptions go in the spec, not in your head.
 
@@ -83,7 +84,10 @@ Work in this order. Later steps depend on earlier ones, so do not jump ahead.
    See `references/rules-and-feeders.md`.
 5. **TI processes.** One process per job, tab-correct.
    See `references/ti-processes.md`.
-6. **Views and security.** Input views, reporting views, who writes where.
+6. **Views and security.** Input views, reporting views, who writes where. Decide
+   whether variance and other derived columns are dimension members with rules or
+   MDX calculated members in views, and record who loses access under each.
+   See `references/views-and-calculated-members.md`.
 7. **Build sequence.** Dimensions, cubes, rules, TI, chores, then views, with the
    checkpoints at which `pa-model-review` should run.
 
@@ -125,9 +129,11 @@ Write the long-form design document only if asked.
 
 | Path | Contains |
 |---|---|
-| `references/dimensional-modelling.md` | Grain, hierarchies, element types, sparsity, dimension order |
+| `references/dimensional-modelling.md` | Grain, hierarchies, inherited-dimension defects, element types, sparsity, dimension order, attributes |
 | `references/rules-and-feeders.md` | Rule scoping, SKIPCHECK/FEEDSTRINGS, feeder design and overfeeding |
 | `references/ti-processes.md` | Tab semantics, variable types, parameters, error handling |
-| `references/platform-matrix.md` | What differs between on-prem and SaaS |
+| `references/views-and-calculated-members.md` | Variance placement, sign convention, `SOLVE_ORDER`, string columns, subsets, agent readiness |
+| `references/platform-matrix.md` | What differs between on-prem and SaaS, including behaviour tested on v12 |
+| `references/glossary.md` | The TM1 vocabulary to use in every spec and review, each term tagged core, convention or v12 |
 | `references/design-spec-template.md` | The spec contract emitted by Step 5 |
 | `patterns/` | Extensible pattern registry. Read the directory, do not assume |

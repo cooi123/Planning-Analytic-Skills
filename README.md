@@ -1,24 +1,40 @@
 # Planning Analytics skills
 
-Eight skills for working with IBM Planning Analytics (TM1) from an AI assistant
-(IBM Bob or Claude Code). They cover three jobs:
+Twelve skills for working with IBM Planning Analytics (TM1) from an AI assistant
+(IBM Bob or Claude Code), in two groups: core PA skills, and the `wxo-paw` group
+(watsonx Orchestrate + PAW integration). They cover five jobs:
 
 - **Connect** an AI client to the PA agentic-AI MCP endpoint.
+- **Query**: get correct numbers out of a cube through the MCP tools, and test an
+  agent that does it.
 - **Model**: design, build and review TM1 models, write their business rules, and load their data with TI.
+- **Build PAW content from code**: create books, dashboards and widgets through
+  the REST APIs.
 - **Embed**: run a custom watsonx Orchestrate (wxO) agent inside Planning
   Analytics Workspace (PAW) chat that understands what the user is looking at
   and can drive the PAW screen.
 
+### Core
+
 | Skill | Use it to | Writes to a server |
 |---|---|---|
 | [`pa-mcp-connect`](pa-mcp-connect/SKILL.md) | Connect an MCP client to PA, or work out why a connection fails | No |
+| [`pa-agent-query`](pa-agent-query/SKILL.md) | Answer questions from cube data through the MCP tools without wrong numbers, and build a regression test set for an agent | No |
 | [`pa-model-design`](pa-model-design/SKILL.md) | Design a model and emit a design spec | No |
 | [`pa-model-build`](pa-model-build/SKILL.md) | Build an approved spec on a server | **Yes**, only when invoked by name |
+| [`pa-model-scan`](pa-model-scan/SKILL.md) | Scan a TM1 database read-only to inventory structure and map cube dependencies for health checks and migration analysis | No |
 | [`pa-model-review`](pa-model-review/SKILL.md) | Review a model against its spec or on its own, and triage wrong numbers | No |
 | [`pa-rules`](pa-rules/SKILL.md) | Write, explain and fix business rules and feeders, and load them through PAW, TI or REST | Only when asked |
 | [`pa-ti`](pa-ti/SKILL.md) | Write, debug and run TurboIntegrator processes, including loads from files, databases, SAP and Cognos | Only when asked |
-| [`paw-wxo-context`](paw-wxo-context/SKILL.md) | Connect PAW to a custom wxO agent and use PAW's `data_context` (open cubes, MDX, selected cells) | No |
-| [`paw-wxo-actions`](paw-wxo-actions/SKILL.md) | Make the agent drive PAW: open books, cubes and views, switch perspective, run AI panels | No (UI only, as the signed-in user) |
+| [`paw-dashboard-api`](paw-dashboard-api/SKILL.md) | Create, clone and delete PAW books, dashboards and widgets (grids, bar/line/column charts, selectors) through the REST APIs, and test them safely on a tenant | **Yes**, only when asked (creates and deletes books and views) |
+
+### wxO and PAW integration (wxo-paw/)
+
+| Skill | Use it to | Writes to a server |
+|---|---|---|
+| [`wxo-paw/pa-wxo-agent`](wxo-paw/pa-wxo-agent/SKILL.md) | Build, connect, test and ship a production wxO agent on PA | No (wxO only); its Flows may write to TM1 after user approval |
+| [`wxo-paw/paw-wxo-context`](wxo-paw/paw-wxo-context/SKILL.md) | Connect PAW to a custom wxO agent and use PAW's `data_context` (open cubes, MDX, selected cells) | No |
+| [`wxo-paw/paw-wxo-actions`](wxo-paw/paw-wxo-actions/SKILL.md) | Make the agent drive PAW: open books, cubes and views, switch perspective, run AI panels | No (UI only, as the signed-in user) |
 
 ## Quick start
 
@@ -30,10 +46,10 @@ Copy the skill folders, not this README, into your assistant's skills directory.
 git clone <this repo> pa-skills
 
 # IBM Bob: per workspace
-mkdir -p .bob/skills && cp -r pa-skills/pa-* pa-skills/paw-* .bob/skills/
+mkdir -p .bob/skills && cp -r pa-skills/pa-* pa-skills/paw-* pa-skills/wxo-paw/pa-wxo-agent pa-skills/wxo-paw/paw-wxo-* .bob/skills/
 
 # Claude Code: per project, or ~/.claude/skills for every project
-mkdir -p .claude/skills && cp -r pa-skills/pa-* pa-skills/paw-* .claude/skills/
+mkdir -p .claude/skills && cp -r pa-skills/pa-* pa-skills/paw-* pa-skills/wxo-paw/pa-wxo-agent pa-skills/wxo-paw/paw-wxo-* .claude/skills/
 ```
 
 Keep each skill's `references/`, `patterns/`, `checks/`, `scripts/` and
@@ -49,6 +65,9 @@ credential (username/password, MCSP API key or OAuth client).
 ```
 Connect Claude to my PA MCP server at https://<host>. It's PA on Cloud, version 2.1.23.
 My MCP server returns 401, what's wrong?
+Which store had the worst sales variance to budget in FY2025?
+The data explorer gave me a number that looks wrong. Check it.
+Build a test question set for my PA agent.
 ```
 
 **B. Design, build and review a model**
@@ -78,9 +97,10 @@ You need all of the following:
 - On PA on Cloud: a watsonx.ai project and API key.
 - The ADK CLI (`orchestrate`).
 
-Work through `paw-wxo-context` first, then `paw-wxo-actions`:
+Work through `pa-wxo-agent` first, then `paw-wxo-context`, then `paw-wxo-actions`:
 
 ```
+Build a wxO agent for Planning Analytics with OAuth per-user credentials.
 Connect PAW agentic chat to my wxO agent.
 Make my agent explain the cell I've selected in PAW.
 Make the agent open a cube when I ask.
@@ -89,9 +109,13 @@ The agent returns JSON but nothing happens in PAW.
 
 ## How each skill is designed
 
-All eight share three rules:
+All of them share four rules:
 
 - They never ask for or store credentials.
+- Code they produce for production (agent tools, chart and dashboard tools) never
+  holds a credential. It reads one from the platform connection at run time,
+  preferably a per-user OAuth connection. See
+  [`wxo-paw/pa-wxo-agent/references/wxo-oauth.md`](wxo-paw/pa-wxo-agent/references/wxo-oauth.md).
 - They separate what was verified from what was inferred.
 - Project-specific facts live in config or data files, not in skill prose.
 
@@ -123,6 +147,34 @@ The deep material is in `references/` (endpoints by version, authentication,
 troubleshooting). It warns that a connected agent gets the endpoint's write and
 delete tools.
 
+### `pa-agent-query`: right numbers, or a clear "no data"
+
+Getting connected is the easy part. In testing on PA as a Service the
+natural-language data explorer answered none of three phrasings of a variance
+question, and on a plain single-cell lookup it returned real, consistent numbers for
+a department leaf instead of the store total that was asked for. Zeros get noticed.
+That kind of answer doesn't. The skill works in this order:
+
+1. Write down the facts about the cube that its member names don't show: sign
+   convention, fiscal calendar, which periods hold Actual, data scope, known-broken
+   hierarchies.
+2. Pick the tool. MDX through `execute_mdx_and_get_view` for any number you will
+   quote. The data explorer for exploring only, with its member choices read back.
+3. Confirm every member with `lookup_potential_members`, level as well as name.
+4. Compute variance and rankings as `WITH MEMBER` and `ORDER`, with `ABS()` on the
+   base and ratios at the highest `SOLVE_ORDER`.
+5. Read raw values. `get_saved_view` renders cost-line variance % with the sign
+   flipped.
+6. Turn codes into names from the attribute cube, and say which "worst" you used.
+
+It ships with three references:
+
+- `references/data-explorer-limits.md`: the worked test, attempt by attempt.
+- `references/mdx-patterns.md`: tested MDX for variance, prior year, ranking,
+  view-local totals and name columns, with the `SOLVE_ORDER` and `NONEMPTY` traps.
+- `references/agent-test-set.md`: a five-tier regression set, from single-cell
+  retrieval to trap questions where the right answer is "nothing there".
+
 ### `pa-model-design` → `pa-model-build` → `pa-model-review`: the modelling lifecycle
 
 ```
@@ -133,8 +185,8 @@ pa-model-design  ──spec──▶  pa-model-build  ──▶  pa-model-review
 
 - **Conventions are config.** All three read `pa-conventions.yaml`. Nothing
   project-specific is written into a skill.
-- **The standard is data.** `pa-model-review/checks/checks.yaml` holds 35 checks
-  (dimensions, cubes, rules, feeders, TI, security, naming). Review uses them to
+- **The standard is data.** `pa-model-review/checks/checks.yaml` holds 47 checks
+  (dimensions, cubes, rules, feeders, TI, MDX views, security, naming). Review uses them to
   verify. Design runs the same checks against itself before it emits a spec, so
   design and review can't drift apart. Org-specific checks go in
   `checks.local.yaml`, merged by `id`.
@@ -147,6 +199,13 @@ pa-model-design  ──spec──▶  pa-model-build  ──▶  pa-model-review
 - **Build is fenced.** It runs only when invoked by name. It refuses any
   environment marked `writable: false`, and confirms each destructive change
   before making it.
+- **Views are part of the design.** `references/views-and-calculated-members.md`
+  covers where variance lives (dimension members with rules, or MDX in views, and who
+  loses access to each, AI agents included), sign convention from weights,
+  `SOLVE_ORDER`, string columns, subsets and an agent-readiness list.
+- **Inherited dimensions get checked before loading.** Mixed-level consolidations,
+  YTD members with an opening-balance child, broken rolling hierarchies, mis-parented
+  members and overlapping account families each have a check.
 - **Review has three modes:** conformance (against a spec), intrinsic (no spec;
   "structurally sound, intent not assessed") and triage (symptom to cause).
 
@@ -200,6 +259,29 @@ It ships with two references:
 - `references/writing-and-running-guide.md`: a human guide to the PAW process
   editor, running, scheduling with chores, and troubleshooting.
 
+### `pa-wxo-agent`: build and ship a production wxO agent on PA
+
+The foundation skill for the wxO-PAW group. It covers the full agent lifecycle:
+
+- **Connection choice:** OAuth auth-code (per-user, member credentials) versus API
+  key (team, one identity). OAuth is preferred for production.
+- **Setup order:** connection → credentials → toolkit import. The toolkit import
+  needs a live token, so sign in to draft first.
+- **Least-privilege toolkits:** list named MCP tools, not `"*"`. Write tools never
+  go in the agent's own `tools:` list.
+- **Safe writes:** every TM1 modification goes through an approval Flow with Yes/No
+  buttons. The write-capable step lives inside the Flow.
+- **Python tools calling TM1 REST:** read credentials from the wxO connection at run
+  time with `connections.oauth2_auth_code(APP_ID).access_token`. For TM1py, re-add
+  the Bearer header after creating the service.
+- **Pre-production checklist:** no credential in code, HTTPS only, redacted errors,
+  tested Flows, and a grep for hardcoded secrets before shipping.
+
+The skill points to `references/agent-best-practices.md` (architecture, agent
+definition, instructions, tools, numbers, writes, connections, charts, testing,
+deploy, issues, checklist) and `references/flows-and-approvals.md` (approval
+pattern, gotchas, validation).
+
 ### `paw-wxo-context`: the agent knows what's on the user's screen
 
 PAW sends a `data_context` variable with every chat message: open widgets, cubes,
@@ -245,7 +327,7 @@ The Python assets have unit tests. Run them with the Python that has the wxO ADK
 installed:
 
 ```bash
-cd paw-wxo-context/assets/resolve_selected_cell  && python -m unittest test_resolve_selected_cell.py
+cd wxo-paw/paw-wxo-context/assets/resolve_selected_cell  && python -m unittest test_resolve_selected_cell.py
 cd ../paw_data_context_guard                     && python -m unittest test_paw_data_context_guard.py
 cd ../cell_lineage                               && python -m unittest test_cell_lineage.py
 ```
@@ -258,8 +340,17 @@ cd ../cell_lineage                               && python -m unittest test_cell
   `switch_to_perspective`.
 - Selected-cell context and resolution against a live view.
 
+**Live-tested on PA as a Service, TM1 12.6.3** (August 2026), building and querying
+a seven-dimension retail P&L cube from a wxO agent:
+
+- Basic `apikey:<PA API key>` auth, and the wxO connection → toolkit → agent import.
+- Data explorer versus MDX retrieval, and the `get_saved_view` sign inversion.
+- The MDX patterns in `pa-agent-query/references/mdx-patterns.md`.
+- The dimension defects behind checks DIM-007 to DIM-011, CUB-006, VW-001 to
+  VW-004, NAM-003 and NAM-004, and the load practices in `pa-model-build`.
+
 The connection and PAW skills mark which parts are verified and which aren't.
-The modelling skills, `pa-rules` and `pa-ti` haven't been run end to end against a server yet.
+`pa-model-build` as a skill, `pa-rules` and `pa-ti` haven't been run end to end against a server yet.
 
 ## Security
 
@@ -281,6 +372,6 @@ The modelling skills, `pa-rules` and `pa-ti` haven't been run end to end against
 |---|---|
 | A modelling pattern | A file in `pa-model-design/patterns/`, per its README |
 | A review check | An entry in `pa-model-review/checks/checks.yaml`, or `checks.local.yaml` for org-only checks |
-| A PAW command | Capture the payload from the default PA agent (DevTools → Network) and add it to `paw-wxo-actions/references/command-templates.md` with the PAW version |
-| A PAW reply | A row in `paw-wxo-actions/references/paw-responses.md` |
+| A PAW command | Capture the payload from the default PA agent (DevTools → Network) and add it to `wxo-paw/paw-wxo-actions/references/command-templates.md` with the PAW version |
+| A PAW reply | A row in `wxo-paw/paw-wxo-actions/references/paw-responses.md` |
 | A lifecycle stage | A new skill folder |

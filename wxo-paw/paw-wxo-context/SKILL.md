@@ -258,6 +258,11 @@ The runtime fills `context` automatically. The user is never asked for it. Write
 `request_context` last only for the current run. In practice the reference agent
 didn't need this: the plugin plus explicit tool arguments was simpler to debug.
 
+If the tool also calls TM1, it takes the credential from a wxO connection
+(`expected_credentials` plus `connections.oauth2_auth_code(...)`), never from a key
+in the code. The recipe, including the TM1py Bearer-header fix, is in
+`../pa-wxo-agent/references/wxo-oauth.md`.
+
 ## Step 6. Test in PAW
 
 | Test | Expect |

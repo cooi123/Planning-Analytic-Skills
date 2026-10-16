@@ -22,6 +22,19 @@ Design implications:
   deployment facts and belong in environment variables. See
   `{{config.environments}}`.
 
+## Tested on v12 (TM1 v12.6.3, 2026-10-16)
+
+Behaviour observed by running it, relevant when `edition` is `paas`. Full detail is
+in the tested-behaviour files; re-test after a server upgrade.
+
+| Concern | What was observed | Detail |
+|---|---|---|
+| Cube logging in TI | `CubeSetLogChanges` and `CubeGetLogChanges` do not compile; no `LogChanges` property over REST. Don't design a log-off load window (`TI-011`) | `../../pa-ti/references/v12-tested-behaviour.md` |
+| Conditional-feeder setting | `ReevaluateConditionalFeeders` is absent from the active configuration; conditional feeders still fire once (`FED-007`) | `../../pa-rules/references/v12-tested-behaviour.md` |
+| Stopping a process | `ProcessQuit` ends `QuitCalled`, `ProcessError` ends `Aborted`; neither runs the Epilog (`TI-009`) | `../../pa-ti/references/v12-tested-behaviour.md` |
+| Recursive rules | A 600-step chain resolved, 650 returned `#N/A` silently (`RUL-007`) | `../../pa-rules/references/v12-tested-behaviour.md` |
+| Debug and log files | `AsciiOutput` writes to the root of the database `Files` area; process logs are JSON lines read over REST | `../../pa-ti/references/v12-tested-behaviour.md` |
+
 This file lists design-affecting differences only. It is not an API reference.
 Connection mechanics belong to the MCP server or your REST tooling, not to a
 modelling skill.

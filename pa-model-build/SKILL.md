@@ -88,6 +88,36 @@ becomes a real parameter. Resolving names from literals is a blocking defect
 Execute each new process once against a scoped test case before wiring it into a
 chore.
 
+### Data loads and attributes
+
+These held up on a live build of a seven-dimension retail P&L cube:
+
+- **Write a reviewable file before writing to the server.** Attribute text, alias
+  text and account selections go to a CSV first, one row per member. Scripts default
+  to a dry run and write only with an explicit flag such as `--apply`. Nothing goes
+  to the server until a person has read the file.
+- **Load one slice first.** One entity, one year, one version. Then check that every
+  rollup foots: each named total equals the sum of its parts, the YTD total equals the
+  sum of the months, and the opening-balance period is empty. Only then load the full
+  scope.
+- **Load leaves only.** Never load a YTD or other consolidated period. The
+  consolidation sums the months, and a direct load double-counts.
+- **Check the sign on a cost line** in the validation slice against the spec's sign
+  convention (DIM-007).
+- **Exclude duplicate postings** across account families before the full load
+  (CUB-006). Write the exclusion list into the spec.
+- **Make every script idempotent and re-runnable**, including attribute creation
+  (skip if present) and selections that used to live in a one-off shell command.
+  Selection logic that isn't committed can't be reviewed. On one build a
+  throwaway selection silently dropped 109 accounts (DIM-008).
+
+**Synthetic demo data needs direction, not noise.** Symmetric random jitter cancels
+out. Across 12 periods, 13 departments and 10 stores it summed to 0.2% variance at
+network level, which leaves nothing to analyse. Give each entity a directional bias
+per year and each cost branch a drift against budget. Drive cost lines from plan
+volume, not actual sales, so cost variance stays cost variance. Seed the generator so
+a reload writes identical values, and label the data as synthetic in the spec.
+
 ## Step 3. Verify
 
 Run a full `pa-model-review` in conformance mode against the spec.

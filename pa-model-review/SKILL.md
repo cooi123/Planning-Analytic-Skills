@@ -7,8 +7,10 @@ description: >-
   correctly", "check these rules", "review this TI process", "check for unfed cells",
   "consolidation is showing zero", "the total doesn't match the parts", "feeder
   trace", "overfeeding", "model handover", "post-build check", "sign off this model",
-  or "compare two TM1 models". Covers dimensions, cube structure, rules, SKIPCHECK
-  and FEEDERS, TurboIntegrator processes, security, and naming.
+  "cost total shows positive", "variance sign is wrong", "check this MDX view", or
+  "compare two TM1 models". Covers dimensions, cube structure, rules, SKIPCHECK and
+  FEEDERS, TurboIntegrator processes, MDX views and calculated members, security,
+  and naming.
 user-invocable: true
 ---
 
@@ -34,6 +36,7 @@ grow, so read the file every time.
 | **Conformance** | A design spec exists | Does the build match what was designed? |
 | **Intrinsic** | No spec | Is this internally consistent and sound? |
 | **Triage** | Specific wrong behaviour reported | What is causing it? |
+| **Health check** | A scan from `pa-model-scan` exists or is requested | Overall condition, deviations from best practice, and migration readiness, as one report |
 
 State the mode before reporting. An intrinsic review cannot tell you whether the model
 does what the business wanted. It can only tell you the model is not
@@ -93,9 +96,27 @@ Work from symptom to cause:
 | Values change on re-running a load | TI-005 |
 | Load works in dev, fails in prod | TI-002 |
 | Numbers change without anyone editing them | CUB-004, or a write to a consolidated cell spreading |
+| A cost total is positive, or far too small | DIM-008 dropped leaves, DIM-007 sign convention |
+| A company total is too high | CUB-006 posting loaded twice, DIM-010 YTD loaded directly |
+| Rolling or period totals are wrong, monthly figures fine | DIM-009, DIM-010 |
+| One entity's total isn't comparable with its peers | DIM-011 |
+| Variance % on cost lines has the wrong sign | Which tool rendered it first. `get_saved_view` inverts it. Then VW-003 |
+| A view's total variance % is wildly off, dollars fine | VW-001 |
+| A view with a name column returns every row | VW-002 |
+| An agent or the data explorer returns a plausible wrong number | Not a model defect until shown otherwise. Use `pa-agent-query` |
 
 Report the cause, the evidence for it, and the fix. Stop at the first cause that fully
 explains the symptom, then note anything else found along the way separately.
+
+### Health check mode
+
+Run `pa-model-scan` first (or use its outputs if already available). Run all checks
+including `HLT-*`, and `MIG-*` when migration is in scope. Verify each candidate
+against the model. Write the report using `references/health-check-report.md`.
+
+The intrinsic-mode caveat applies: a health check assesses internal consistency and
+adherence to best practices, but does not verify whether the model implements the
+business requirements correctly.
 
 ## Step 4. Report
 
@@ -134,4 +155,7 @@ In intrinsic mode, qualify the verdict: *structurally sound; intent not assessed
 | `checks/checks.yaml` | The check registry, the standard as data |
 | `checks/checks.local.yaml` | Optional project overrides, merged by `id` |
 | `checks/README.md` | How to add or tune a check |
+| `references/health-check-report.md` | Template for health check and migration readiness reports |
+| `../pa-model-scan/` | Inventory and dependency graph from model scan |
 | `../pa-model-design/references/` | Background on why each standard exists |
+| `../pa-model-design/references/glossary.md` | The vocabulary a review must use when naming a finding |

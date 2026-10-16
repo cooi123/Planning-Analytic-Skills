@@ -73,17 +73,23 @@ ENDIF;
 
 `ItemReject` belongs in Metadata and Data, where there is a source record to
 reject. Prolog runs before any record is read, so stop the run there instead.
-`ProcessError` ends it with an error status that chores and calling processes
-can see.
+`ProcessError` ends it as `Aborted` (caller code 12), the status a chore or
+calling process should treat as failure. Neither it nor `ProcessQuit` runs the
+Epilog, so cleanup that must always happen can't live only there. Tested
+behaviour: `../../pa-ti/references/v12-tested-behaviour.md`.
 
 ## 5. Error handling
 
 Required when `{{config.ti.require_error_handling}}` is true.
 
 - Validate inputs in Prolog and reject early, before partial writes occur.
-- `ItemReject` skips one record. `ProcessError` stops the run with an error
-  status, and `ProcessQuit` stops it quietly. A bad record and a bad
-  configuration deserve different outcomes.
+- `ItemReject` skips one record. `ProcessError` stops the run as `Aborted`.
+  `ProcessQuit` stops it as `QuitCalled`, which is neither success nor failure
+  and gives a caller code 9, so use it only when stopping is a normal outcome.
+  A bad record and a bad configuration deserve different outcomes (`TI-009`).
+- A bad *value* (unknown key, write to a consolidated or rule cell) is only a
+  minor error: the run carries on and ends `HasMinorErrors`. Count rejected
+  writes.
 - Log to a known location in Epilog: rows read, rows written, rows rejected.
 - A process that writes nothing and reports success is indistinguishable from one that
   worked. Always report counts.

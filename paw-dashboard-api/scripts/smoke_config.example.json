@@ -1,0 +1,31 @@
+{
+  "host": "https://{region}.planninganalytics.saas.ibm.com",
+  "tenant_id": "{tenantId}",
+  "database": "{DatabaseYouOwn}",
+  "cube": "{CubeName}",
+  "key_env": "PA_API_KEY",
+  "helpers_dir": "/path/to/clone/of/Planning-analytics-bob",
+  "prefix": "ZZ_API_Test_",
+  "state_file": "smoke_state.json",
+  "page": {
+    "{Dim1}": "{member}",
+    "{Dim2}": "{member}",
+    "{Dim3}": "{member}",
+    "{Dim4}": "{member}"
+  },
+  "chart": {
+    "category_dim": "{SmallDimension}",
+    "series_dim": "{Dimension}",
+    "series_members": ["{memberA}", "{memberB}"]
+  },
+  "grid": {
+    "rows": "{SmallDimension}",
+    "cols": "{Dimension}",
+    "rows_members": ["{m1}", "{m2}"],
+    "cols_members": ["{memberA}", "{memberB}"]
+  },
+  "selectors": [
+    {"dimension": "{DimA}", "root_member": "{ExistingConsolidatedMember}"},
+    {"dimension": "{DimB}", "root_member": "{ExistingConsolidatedMember}"}
+  ]
+}

@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "scanned_at": "2026-10-16T03:00:00Z",
+  "source": {
+    "database": "Demo",
+    "server_version": "12.6.3"
+  },
+  "cubes": [
+    {
+      "name": "DRP Route P&L",
+      "is_control": false,
+      "dimensions": [
+        "Period",
+        "Route"
+      ],
+      "last_data_update": null,
+      "last_schema_update": null,
+      "rules": "# DB('Commented',1);\n['x']=N:DB('Rates',1)+DB(sCube,1);\nFEEDERS;\n['x']=>DB('Summary',1);",
+      "views": []
+    },
+    {
+      "name": "Sales",
+      "is_control": false,
+      "dimensions": [
+        "Period"
+      ],
+      "last_data_update": null,
+      "last_schema_update": null,
+      "rules": null,
+      "views": []
+    },
+    {
+      "name": "Rates",
+      "is_control": false,
+      "dimensions": [],
+      "last_data_update": null,
+      "last_schema_update": null,
+      "rules": null,
+      "views": []
+    },
+    {
+      "name": "Summary",
+      "is_control": false,
+      "dimensions": [],
+      "last_data_update": null,
+      "last_schema_update": null,
+      "rules": null,
+      "views": []
+    },
+    {
+      "name": "Idle \"Cube\"",
+      "is_control": false,
+      "dimensions": [],
+      "last_data_update": null,
+      "last_schema_update": null,
+      "rules": null,
+      "views": []
+    },
+    {
+      "name": "}CellSecurity_Sales",
+      "is_control": true,
+      "dimensions": [],
+      "last_data_update": null,
+      "last_schema_update": null
+    }
+  ],
+  "dimensions": [
+    {
+      "name": "Period",
+      "is_control": false,
+      "hierarchies": []
+    },
+    {
+      "name": "Route",
+      "is_control": false,
+      "hierarchies": []
+    },
+    {
+      "name": "Unused",
+      "is_control": false,
+      "hierarchies": []
+    }
+  ],
+  "processes": [
+    {
+      "name": "Load Sales",
+      "is_control": false,
+      "parameters": [
+        {
+          "name": "pCube",
+          "type": "String",
+          "value": "Rates"
+        }
+      ],
+      "datasource": {
+        "type": "TM1CubeView",
+        "name": "Sales",
+        "view": "zLoad"
+      },
+      "prolog": "cCube = 'Sales'; CellPutN(v, cCube, 'x'); CellGetN(1, pCube, 'x'); CellGetS('Rates','x'); ViewZeroOut('Sales','v'); ExecuteProcess('Child'); CellGetN(pCube, 'x');",
+      "metadata": "",
+      "data": "",
+      "epilog": ""
+    },
+    {
+      "name": "Child",
+      "is_control": false,
+      "parameters": [],
+      "datasource": {
+        "type": null,
+        "name": null,
+        "view": null
+      },
+      "prolog": "",
+      "metadata": "",
+      "data": "",
+      "epilog": ""
+    },
+    {
+      "name": "Manual",
+      "is_control": false,
+      "parameters": [],
+      "datasource": {
+        "type": null,
+        "name": null,
+        "view": null
+      },
+      "prolog": "",
+      "metadata": "",
+      "data": "",
+      "epilog": ""
+    }
+  ],
+  "chores": [
+    {
+      "name": "Nightly",
+      "active": true,
+      "start_time": null,
+      "frequency": null,
+      "processes": [
+        "Load Sales"
+      ]
+    },
+    {
+      "name": "Disabled",
+      "active": false,
+      "start_time": null,
+      "frequency": null,
+      "processes": []
+    }
+  ],
+  "security": {
+    "groups": [],
+    "cell_security_cubes": [
+      "Sales"
+    ],
+    "element_security_dimensions": []
+  },
+  "error_logs": {
+    "count": 0,
+    "latest": []
+  },
+  "warnings": []
+}

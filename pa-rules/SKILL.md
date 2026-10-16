@@ -25,7 +25,9 @@ Read `references/rules-syntax.md` before writing any statement, and
 `references/rules-functions.md` when choosing a function. Read
 `references/rule-examples.md` when the request matches a known shape. Point the user
 to `references/writing-and-deploying-guide.md` when they need the click-path to put
-rules on a server.
+rules on a server. Read `references/v12-tested-behaviour.md` for what unfed rules,
+`SKIPCHECK`, conditional feeders, `/` against `\` and long recursive chains
+actually do on v12, and for the `CheckRules` call and its messages.
 
 ## Step 0. Load conventions and get the facts
 

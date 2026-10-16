@@ -2,15 +2,16 @@
 name: pa-mcp-connect
 description: >-
   Connect an MCP client to IBM Planning Analytics agentic-AI endpoints, and diagnose
-  connections that fail. Covers the endpoint split at PAW 2.1.22 / 3.1.9 (discrete
-  cube + analysis endpoints before, unified ibm-pa-tools after), the three
-  authentication paths (OAuth, MCSP API key, basic username/password), and a
-  status-code triage tree. Use for "connect to the PA MCP server", "add PA tools to
-  Claude/Cursor/watsonx Orchestrate", "my PAoC-server MCP won't connect", "MCP
-  returns 401/403/404/500", "which MCP endpoint do I use", "the tools aren't showing
-  up", "configure mcpServers for Planning Analytics", "TM1 MCP tools", "agentic-ai
-  endpoint", "PA Agent add-on", or whenever an MCP entry pointing at a
-  planninganalytics.saas.ibm.com or PAW host misbehaves.
+  connections that fail. Covers the endpoint split at PAW 2.1.22 / 3.1.9, the
+  authentication paths (OAuth, MCSP API key, basic, PA API key as Basic
+  apikey:<key>), and a status-code triage tree. For wiring PA into a watsonx
+  Orchestrate agent (connections, toolkits, OAuth from wxO), use pa-wxo-agent. Use
+  for "connect to the PA MCP server", "add PA tools to Claude/Cursor", "my
+  PAoC-server MCP won't connect", "MCP returns 401/403/404/500", "which MCP endpoint
+  do I use", "the tools aren't showing up", "configure mcpServers for Planning
+  Analytics", "TM1 MCP tools", "agentic-ai endpoint", "PA Agent add-on", "Basic
+  realm=apikey", or whenever an MCP entry pointing at a planninganalytics.saas.ibm.com
+  or PAW host misbehaves.
 user-invocable: true
 ---
 
@@ -105,8 +106,10 @@ method. Choose by what the user holds:
 | Credential in hand | Method | Header |
 |---|---|---|
 | Username + password (PAoC, on-prem, native/LDAP) | Basic | `Authorization: Basic base64(user:pass)` |
+| PA API key, server says `Basic realm="apikey"` (SaaS) | Basic, literal username `apikey` | `Authorization: Basic base64(apikey:<key>)` |
 | MCSP API key (SaaS) | Exchange for a JWT, ~1h TTL | `Authorization: Bearer <token>` |
 | OAuth client id + secret | Authorization-code flow, scope `v0userContext` | `Authorization: Bearer <access_token>` |
+| wxO agent in production | OAuth auth-code wxO connection, `live` = member; tools read the token from the connection | `Authorization: Bearer <access_token>` on MCP and TM1 REST through PAW. Recipe in the `pa-wxo-agent` skill |
 | watsonx Orchestrate key + MCP token | Basic, key as **username**, token as **password** | `Authorization: Basic base64(apikey:token)` |
 
 Two traps worth stating plainly, because both produce confident-looking configs
@@ -114,6 +117,9 @@ that cannot work:
 
 - **A SaaS bearer token will not authenticate against a PAoC or on-prem host.** They
   are separate identity systems. Tokens are not portable between deployments.
+- **A PA API key is not an IBM Cloud IAM key.** Exchanging it at
+  `iam.cloud.ibm.com` returns no token, and sending it raw as a bearer fails. When the
+  `401` says `Basic realm="apikey"`, put it in Basic with username `apikey`.
 - **OAuth client-credentials is not supported.** IBM documents only the interactive
   authorization-code grant. An unattended agent needs a human to complete the flow
   once, then refreshes. If a user wants headless SaaS access, steer them to an MCSP
@@ -211,3 +217,19 @@ points it at a customer environment.
 Keep API keys, client secrets, and tokens in environment variables or a secret
 store. Tokens expire — refresh rather than hardcode. When you must echo a config
 back to a user, leave the credential as a placeholder.
+
+**Production tools never hold a credential.** When you write or review a tool that
+an agent deploys (a wxO Python tool, an MCP toolkit, a chart or dashboard tool), the
+tool reads its credential from the platform connection at run time. No API key,
+client secret, token or password goes in tool code, YAML, agent instructions, or a
+value substituted in at deploy time. Prefer OAuth with per-user (member)
+credentials so PA security applies to each user. Run the review checklist in
+`references/wxo-oauth.md` in the `pa-wxo-agent` skill before a tool ships, and refuse to ship one that fails
+it.
+
+## After it connects
+
+A working connection is not a working agent. The natural-language data explorer
+tool picks members by fuzzy match and can return confident numbers for the wrong
+member, and `get_saved_view` renders cost variance signs backwards. Use
+`pa-agent-query` before anyone relies on answers from these tools.

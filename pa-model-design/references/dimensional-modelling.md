@@ -68,6 +68,44 @@ Use alternate hierarchies only when a dimension genuinely has two independent ro
 (cost centre by geography *and* by business unit). Never add one speculatively, since
 each one is another thing to maintain.
 
+### Inheriting a dimension you didn't build
+
+Dimensions sourced from SAP or an older model carry defects you have to design
+around, not just record. Check these before scoping a load. Each was found on a live
+model:
+
+- **Mixed-level consolidations.** A node with both leaf and consolidated children.
+  Any script or rule that treats "reporting line" as "a node whose children are all
+  leaves" drops the direct leaves. On one model that lost 91 marketing accounts and
+  turned a DC cost block positive, because only its income line was loaded.
+- **Period-to-date consolidations that include an opening-balance member.** If
+  `06 YTD` = `00` + `01` ... `06`, load nothing to `00` for flow measures. Load monthly
+  leaves only and let the YTD consolidations sum them. Loading YTD directly
+  double-counts.
+- **Rollups with missing or wrong children.** Compare sibling consolidations of the
+  same family. Rolling-3 nodes with two children each, built before a month existed,
+  give wrong numbers silently. Keep them out of subsets until rebuilt.
+- **Element index out of sequence.** A member added later carries a late index. Sort
+  subsets by name or hierarchy, never by index.
+- **Accounting constructs filed beside operating units.** Calendar-adjustment and
+  lease-overlay centres under a "Distribution Centres" node are not warehouses. Read
+  member names before loading operational data to them.
+- **Mis-parented members.** A code that embeds another parent's key, such as a
+  department leaf of store 1190 under store 1001. Load and label it, or exclude it,
+  but footnote every total it touches.
+- **Overlapping channel accounts.** Two account families, for example store and
+  admin, each carrying a sales line under one +1-weighted total. Load both and
+  company revenue double-counts. Decide which channel owns each posting.
+- **Untidy names.** Trailing full stops and double spaces in element names break
+  exact-match lookups. Quote names from the server, never retype them.
+
+### Sign convention follows the weights
+
+If every weight on the account or measure dimension is +1, costs must be stored
+negative or rollups add cost to revenue. Record the convention in the spec. Variance
+formulas and agent instructions depend on it. See
+`views-and-calculated-members.md` §2.
+
 ## 5. Measure dimension
 
 When `{{config.modelling.measure_dimension}}` is `required`, every cube gets one,
@@ -129,5 +167,26 @@ Under `manual`: record the order the project supplies and offer no reordering ad
 Attributes are the right home for anything that varies *by member* and would otherwise
 be hard-coded into a rule. A rule containing a literal list of element names is almost
 always an attribute waiting to be created.
+
+Attributes write to the `}ElementAttributes_<dim>` control cube. They don't touch
+members, parentage or weights, so they are allowed under a "no dimension changes"
+constraint and come off cleanly.
+
+**Alias versus String for display text.** An alias must be unique within the
+hierarchy **and** must not equal any existing element name, or TM1 rejects it. Use an
+`Alias` for display names that are unique by construction, such as "Northside VIC" for
+a store code. Use a `String` attribute for descriptions that legitimately repeat,
+such as "Store payroll cost" on many accounts. Check collisions before writing: on one
+model `Total Admin`, `Total Trading Stores` and `Total Distribution Centres` already
+existed as elements, which forced different alias text for three rollups.
+
+**Label text you made up.** If the source has no description, as with GL accounts
+exported as bare codes, any text you generate is derived, not authoritative. Prefix it
+`[derived]` or `[assumed]` and keep the code inside the alias, for example
+"Northside VIC Electrical (EL)", so anyone who knows the real meaning spots a wrong
+one. Record where real descriptions would come from, such as the SAP GL text table.
+
+Agents and users can only find a member by name if the name exists somewhere in the
+model. See `views-and-calculated-members.md` §8.
 
 Attribute naming follows `{{config.naming.attribute_case}}`.

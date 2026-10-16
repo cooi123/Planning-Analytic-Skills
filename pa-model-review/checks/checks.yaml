@@ -6,7 +6,7 @@
 #
 # severity : critical | warning | info   (blocking behaviour from config.review)
 # phase    : design (spec only) | build (server only) | both
-# applies_to: dimension | cube | rule | feeder | process | security | naming
+# applies_to: dimension | cube | rule | feeder | process | view | security | naming
 # config_ref: the conventions key that switches or parameterises this check
 # ---------------------------------------------------------------------------
 schema_version: 1
@@ -64,6 +64,68 @@ checks:
     detect: A rule or process branches on literal element names.
     fix: Move the variation to an attribute and write one generic rule.
 
+  - id: DIM-007
+    severity: critical
+    phase: both
+    applies_to: dimension
+    title: Sign convention matches consolidation weights
+    detect: >-
+      Cost branches roll up at weight +1 while costs are stored positive, or at -1
+      while stored negative, so a total adds cost to revenue. Or the convention is not
+      recorded in the spec.
+    fix: >-
+      Read the weights, sample a loaded cost line, and record the convention. Variance
+      formulas and agent instructions are wrong in every line without it.
+
+  - id: DIM-008
+    severity: critical
+    phase: both
+    applies_to: dimension
+    title: Mixed-level consolidations keep their direct leaves
+    detect: >-
+      A consolidation has both leaf and consolidated children, and a load scope,
+      subset or script that walks the hierarchy covers only one kind.
+    fix: >-
+      Treat any consolidation with at least one direct leaf as a reporting line and
+      also recurse into it. Dropped leaves show up as a total with the wrong sign or
+      far too small.
+
+  - id: DIM-009
+    severity: critical
+    phase: both
+    applies_to: dimension
+    title: Sibling rollups of one family are built the same way
+    detect: >-
+      Consolidations in one family, such as rolling-3 periods or quarters, have
+      different child counts or skip a member every sibling should contain.
+    fix: >-
+      Rebuild the family. Until then keep it out of every subset and view, and tell
+      users and agents it is broken.
+
+  - id: DIM-010
+    severity: warning
+    phase: both
+    applies_to: dimension
+    title: Period-to-date consolidations carry only period leaves
+    detect: >-
+      A YTD consolidation includes an opening-balance or other non-period member, and
+      that member holds data for a flow measure. Or YTD members are loaded directly.
+    fix: >-
+      Load monthly leaves only and leave the opening-balance member empty for P&L.
+      Loading YTD directly double-counts.
+
+  - id: DIM-011
+    severity: warning
+    phase: build
+    applies_to: dimension
+    title: Members sit under the parent their code implies
+    detect: >-
+      A member whose code embeds a parent key, such as a store number, rolls up to a
+      different parent. Or an accounting construct sits among operating units.
+    fix: >-
+      Move it, exclude it from the load, or footnote every total it affects. A silent
+      cross-parent member makes one entity's total not like-for-like with its peers.
+
   # ---- Cubes ----
   - id: CUB-001
     severity: warning
@@ -109,6 +171,26 @@ checks:
     detect: estimated_members or density missing from a dimension entry.
     fix: Record both. Dimension order cannot be checked without them.
 
+  - id: CUB-006
+    severity: critical
+    phase: both
+    applies_to: cube
+    title: No posting is loaded twice under a common total
+    detect: >-
+      Two account or entity families carry the same economic posting, such as a
+      store sales line and an admin sales line, and both are loaded under one total.
+    fix: >-
+      Decide which family owns each posting and exclude the duplicate from the load.
+      With +1 weights the total double-counts revenue and cost.
+
+  - id: CUB-007
+    severity: warning
+    phase: both
+    applies_to: cube
+    title: Non-additive inputs do not sum
+    detect: An input measure that is a rate, average, ratio or percentage (fare, price, load factor, change %) is a leaf with no C-level rule, so every consolidation adds it up.
+    fix: "Compute it at consolidated levels with a rule from additive components (for example revenue \\ passengers), or keep it at leaf level only and hide its totals. Found in a real review: an average fare summed to 21,384 at network/year level and a monthly change % summed to -58.8 for the year."
+
   # ---- Rules ----
   - id: RUL-001
     severity: critical
@@ -150,7 +232,7 @@ checks:
     applies_to: rule
     title: Safe divide used
     detect: A rule divides with / where the denominator can legitimately be zero.
-    fix: Use \ so an empty denominator yields zero instead of an undefined (N/A) value.
+    fix: "Use \\ so an empty denominator yields zero instead of an undefined (N/A) value. Tested on v12: / gives #N/A, \\ gives 0 (over REST the zero reads as a null Value with FormattedValue 0.00)."
 
   - id: RUL-006
     severity: info
@@ -159,6 +241,14 @@ checks:
     title: Rule is the right tool
     detect: Rule computes a value that never changes between data loads.
     fix: Consider a TI process. Rules evaluate on every read, forever.
+
+  - id: RUL-007
+    severity: warning
+    phase: both
+    applies_to: rule
+    title: Recursive chains are bounded
+    detect: A rule reads its own cube's previous period (opening = prior closing) across a chain that can exceed a few hundred steps.
+    fix: "Carry balances forward with a TI process at a cycle boundary (for example year-end) so recursion stays within one cycle. Tested on v12: a chain of 600 resolved and 650 returned #N/A with HTTP 200 and no error, so the failure is silent. Rule shape moves the limit."
 
   # ---- Feeders ----
   - id: FED-001
@@ -215,6 +305,14 @@ checks:
     detect: A feeder target leaves a dimension unqualified, feeding it entirely.
     fix: Qualify every dimension on the target side.
 
+  - id: FED-007
+    severity: warning
+    phase: both
+    applies_to: feeder
+    title: Conditional feeder condition is static
+    detect: A conditional feeder's IF reads a cell value that can change after the feeder has fired.
+    fix: "Use an unconditional feeder, or condition on an element attribute that does not change after load. Tested on v12.6.3: a feeder decided once, and changing the condition (or rewriting the fed value) left the consolidation under-reported."
+
   # ---- Processes ----
   - id: TI-001
     severity: critical
@@ -257,7 +355,7 @@ checks:
     applies_to: process
     title: Process is idempotent
     detect: Re-running changes the result, usually accumulation or no scoped clear.
-    fix: Clear the target scope through a Prolog-built view; prefer CellPutN over CellIncrementN.
+    fix: "Clear the target scope through a Prolog-built view; prefer CellPutN over CellIncrementN. Tested on v12: CellIncrementN run twice gives double the CellPutN result."
 
   - id: TI-006
     severity: warning
@@ -283,6 +381,77 @@ checks:
     title: One job per process
     detect: A single process loads, transforms, and clears.
     fix: "Split and orchestrate with a chore, so a partial failure can be re-run. Exception: atomic object creation."
+
+  - id: TI-009
+    severity: warning
+    phase: both
+    applies_to: process
+    title: Termination function matches the outcome
+    detect: ProcessQuit is used for a failure a chore or calling process must see, or cleanup that must always run sits only in the Epilog of a process that can call ProcessQuit or ProcessError.
+    fix: "Use ProcessError for failures (status Aborted, caller code 12). ProcessQuit ends as QuitCalled (caller code 9), which is neither success nor Aborted. Neither runs the Epilog on v12, so put must-run cleanup before the stop or in the caller."
+
+  - id: TI-010
+    severity: critical
+    phase: both
+    applies_to: process
+    title: Dimension maintenance updates, never rebuilds
+    detect: A process calls DimensionDeleteAllElements (or uses the Recreate option) and re-inserts only some elements.
+    fix: "Insert and update elements, and delete only the ones that are meant to go. Tested on v12: dropped elements lose their data permanently and the process still ends CompletedSuccessfully."
+
+  - id: TI-011
+    severity: info
+    phase: both
+    applies_to: process
+    title: No cube-logging toggles on SaaS
+    detect: A process calls CubeSetLogChanges or CubeGetLogChanges.
+    fix: "Remove the call and the log-off, load, log-on pattern around it. On v12.6.3 both functions fail to compile (Syntax error ... equal sign not found) and the cube has no LogChanges property over REST."
+    config_ref: platform.edition
+
+  # ---- Views ----
+  - id: VW-001
+    severity: critical
+    phase: both
+    applies_to: view
+    title: Ratio calculated members evaluate last
+    detect: >-
+      An MDX view has a ratio member, such as a variance %, and another calculated
+      member that sums, with the summing member at an equal or higher SOLVE_ORDER.
+    fix: >-
+      Give ratios the highest SOLVE_ORDER. Otherwise the total sums percentages and
+      reports the wrong figure with no error.
+
+  - id: VW-002
+    severity: warning
+    phase: both
+    applies_to: view
+    title: Suppression ignores string columns
+    detect: A view puts a string calculated member on an axis and suppresses rows with NON EMPTY.
+    fix: >-
+      Use NONEMPTY(set, {numeric tuple}). A string cell is never empty, so NON EMPTY
+      stops suppressing and the view returns every row.
+
+  - id: VW-003
+    severity: critical
+    phase: both
+    applies_to: view
+    title: Variance percentage follows the sign convention
+    detect: >-
+      Costs are stored negative and a variance % divides by the raw base rather than
+      ABS() of it, so cost overruns read favourable. Or costs are stored positive and
+      no per-line sign is applied.
+    fix: Divide by ABS(base) under a costs-negative convention so negative means unfavourable on every line.
+
+  - id: VW-004
+    severity: info
+    phase: both
+    applies_to: view
+    title: View-local members and access limits are documented
+    detect: >-
+      A view holds calculated members that stand in for dimension members, such as
+      variance or a site total, and the spec does not say who cannot see them.
+    fix: >-
+      Record them. Ad-hoc users, the PA MCP data explorer and other cubes cannot see
+      view-local members.
 
   # ---- Security and naming ----
   - id: SEC-001
@@ -318,3 +487,131 @@ checks:
     detect: A designed or built object uses the reserved control prefix.
     fix: Rename. Those names belong to TM1.
     config_ref: naming.reserved_prefixes.control
+
+  - id: NAM-003
+    severity: warning
+    phase: both
+    applies_to: naming
+    title: Aliases are unique and do not shadow element names
+    detect: An alias value repeats within the hierarchy, or equals an existing element name.
+    fix: >-
+      Change the alias text. TM1 rejects the write, or resolves the name to the wrong
+      member. Use a String attribute for descriptions that can repeat.
+
+  - id: NAM-004
+    severity: info
+    phase: build
+    applies_to: naming
+    title: Element names are clean
+    detect: An element name has leading or trailing spaces, a trailing full stop, or a double space.
+    fix: >-
+      Rename where possible. Otherwise quote names from the server in every script and
+      prompt, because an exact-match lookup of the retyped name fails.
+
+
+
+  # ---- Health (operational) ----
+  - id: HLT-001
+    severity: info
+    phase: build
+    applies_to: cube
+    title: Isolated cube is intentional
+    detect: Cube has no rule, feeder or TI link to any other cube (graph isolated_cubes)
+    fix: Confirm it is a deliberate input or reporting cube; otherwise retire it or link it
+
+  - id: HLT-002
+    severity: warning
+    phase: build
+    applies_to: dimension
+    title: No unused dimensions
+    detect: Dimension is used by no cube (graph unused_dimensions)
+    fix: Delete it after confirming no process builds or reads it
+
+  - id: HLT-003
+    severity: warning
+    phase: build
+    applies_to: process
+    title: Every process is scheduled or called
+    detect: Process is in no chore and called by no process (graph unscheduled_processes)
+    fix: Schedule it, call it from an orchestrating process, or retire it
+
+  - id: HLT-004
+    severity: info
+    phase: build
+    applies_to: process
+    title: Dynamic references are documented
+    detect: Cube or process names are built at run time (graph dynamic_refs)
+    fix: List the possible targets in the design spec so lineage can be reviewed
+
+  - id: HLT-005
+    severity: warning
+    phase: build
+    applies_to: process
+    title: Recent process errors reviewed
+    detect: "The database holds process error logs (inventory error_logs.count > 0)"
+    fix: Read the latest logs; fix or explain each failing process
+
+  - id: HLT-006
+    severity: warning
+    phase: build
+    applies_to: security
+    title: Write access is restricted where data is sensitive
+    detect: No cell or element security on cubes that hold sensitive or approved data (inventory security)
+    fix: Add cell or element security, or record why open access is acceptable
+
+  - id: HLT-007
+    severity: info
+    phase: build
+    applies_to: cube
+    title: Stale cubes reviewed
+    detect: A cube's last_data_update is far older than the rest of the model
+    fix: Confirm it is reference data; otherwise retire it
+
+  - id: HLT-008
+    severity: warning
+    phase: build
+    applies_to: process
+    title: Inactive chores reviewed
+    detect: A chore is inactive (graph inactive_chores)
+    fix: Reactivate it or delete it so the schedule reflects reality
+
+  # ---- Migration v11 -> v12 ----
+  - id: MIG-001
+    severity: critical
+    phase: build
+    applies_to: process
+    title: No TI functions removed in v12
+    detect: "Process code calls any of: ExecuteCommand, CubeSetLogChanges, CubeGetLogChanges, SaveDataAll, CubeSaveData, SetODBCUnicodeInterface, ServerShutdown, ExecuteJavaN, CubeDataReservationAcquire, SetChoreVerboseMessages"
+    fix: "Remove or replace before migrating; on v12.6.3 each fails to compile (equal sign not found or Variable '...' is undefined) so the whole process aborts"
+
+  - id: MIG-002
+    severity: critical
+    phase: build
+    applies_to: process
+    title: No local file system paths
+    detect: "Process code or datasource contains a drive letter path (X:\\), a UNC path (\\\\server\\), or an absolute OS path"
+    fix: "Move files to the database's Files area and use relative names. Absolute and UNC paths were not tested on v12; test before relying on them."
+
+  - id: MIG-003
+    severity: warning
+    phase: build
+    applies_to: process
+    title: ODBC sources reviewed for v12
+    detect: Process uses ODBCOpen/ODBCOutput or an ODBC datasource
+    fix: "These compile on v12 but need the v12 ODBC Data Connector at run time; see ../pa-ti/references/data-sources.md"
+
+  - id: MIG-004
+    severity: warning
+    phase: build
+    applies_to: process
+    title: Debug and output files reviewed
+    detect: Process writes files with ASCIIOutput/TextOutput or reads GetProcessErrorFileDirectory
+    fix: "On v12 a relative file name lands in the root of the Files area (tested). Absolute and UNC paths were not tested; treat them as a risk. Prefer LogOutput for diagnostics."
+
+  - id: MIG-005
+    severity: info
+    phase: build
+    applies_to: process
+    title: Cube logging toggles removed
+    detect: (covered by TI-011) Process relies on switching cube logging off for speed
+    fix: Plan load windows without it; it is not available on v12.6.3

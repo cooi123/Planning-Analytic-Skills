@@ -23,7 +23,9 @@ handling, idempotency, one job per process. Apply it, don't restate it.
 
 Read `references/data-sources.md` when choosing or configuring a data source,
 especially for external systems. Point the user to
-`references/writing-and-running-guide.md` for the PAW click-paths.
+`references/writing-and-running-guide.md` for the PAW click-paths. Read
+`references/v12-tested-behaviour.md` for how processes end, what each v12 error
+message means, and what not to rely on (cube-logging toggles, dimension rebuilds).
 
 ## Step 0. Load conventions and get the facts
 
@@ -117,8 +119,11 @@ error log. "It ran" is not a result.
 | Symptom | Usual cause |
 |---|---|
 | Runs, does nothing | No data source, so Metadata and Data never ran. Or the source returned no rows: wrong file, query or view |
-| "Cell is calculated by a rule" or rejected writes | Writing into a rule-covered cell. Load the input elements instead |
-| Element not found in Data | The element was created in Data instead of Metadata, or the dimension wasn't saved. Insert in Metadata |
+| `Rule applies to cell`, `Cell type is consolidated`, or `Invalid key: Dimension Name ...` (status `HasMinorErrors`) | Writing into a rule-covered cell, a consolidated cell, or an element that doesn't exist. Load the input elements instead; the run carried on, so check the counts |
+| `Element '<x>' not found in dimension` right after inserting it | The element was created in Data instead of Metadata, or in the same Prolog that then uses it. Insert in Metadata and use it in a later pass |
+| Status `QuitCalled` | `ProcessQuit` ran. It is not `Aborted`; a caller sees code 9. Use `ProcessError` if the stop is a failure |
+| `Syntax error ... equal sign not found` | A function name this version doesn't know (for example `CubeSetLogChanges` on v12). Check the name before the arguments |
+| Data for some elements vanished after a dimension load | A delete-all then partial re-insert. Use update, not recreate (`TI-010`) |
 | Numbers load as 0 | A numeric column typed String, or a thousands separator or currency sign in the text. Fix the variable type, clean the text, then `NUMBR` |
 | Values double on re-run | No clear, or `CellIncrementN` (`TI-005`) |
 | Works in dev, fails in prod | A hard-coded name or path (`TI-002`), or a file path that doesn't exist on that server |

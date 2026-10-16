@@ -10,10 +10,10 @@ Append an entry. Do not edit either SKILL.md. They read this file, they do not
 enumerate it.
 
 ```yaml
-  - id: <AREA-nnn>          # DIM CUB RUL FED TI SEC NAM, or a new area prefix
+  - id: <AREA-nnn>          # DIM CUB RUL FED TI VW SEC NAM, or a new area prefix
     severity: critical | warning | info
     phase: design | build | both
-    applies_to: dimension | cube | rule | feeder | process | security | naming
+    applies_to: dimension | cube | rule | feeder | process | view | security | naming
     title: <what good looks like, stated positively>
     detect: <the observable condition that means it failed>
     fix: <the action, and the consequence of not taking it>
